@@ -129,15 +129,15 @@ class Seq2seq(object):
 			# (128,9,13)
 			decoder_logits = tf.reshape(decoder_logits_flat, (decoder_batch_size, decoder_max_steps, config.target_vocab_size))
 			print(decoder_logits)
-			
+		# 所谓输出, 即是最终这13个概率值中最大的概率的索引号对饮的词
 		self.out = tf.argmax(decoder_logits, 2) # infer出来的词 , 特征维度(13)上的最大值, 返回形状为(128, 13)
 
-		# 求cross_entropy_with_logits 的时候,其实是用1*9的向量 点积 9*13 的向量, 得到1*13 的向量, 向量里包含
+		# 求cross_entropy_with_logits 的时候,其实是用1*9的向量 点积 9*13 的向量, 得到1*13 的向量, 向量里包含13个各个词的概率,加入batch之后, 即是(128,13)
 		loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
 			labels=self.seq_targets,#(128,9)# 最后一个维度是9, 但是也可以有13dim
 			logits=decoder_logits, #(128,9,13)
-		)
-		sequence_mask = tf.sequence_mask(self.seq_targets_length, dtype=tf.float32)#(128,9)
+		)								# self.seqtargets_length = [4, 7, 8, 4, 3, 9, 9, 3, 6, 3, 5, 5, 5, 2, 4, 4, 4, 4, 9, 7, 6, 5, 5, 4, 3, 3, 3, 3, 5, 6, 2, 4, 8,....] len=128
+		sequence_mask = tf.sequence_mask(self.seq_targets_length, dtype=tf.float32)#(128,)
 		loss = loss * sequence_mask
 		self.loss = tf.reduce_mean(loss) # 一个batch128个数据的平均loss值
 		
