@@ -23,7 +23,7 @@ class Seq2seq(object):
 	def build_optim(self, loss, lr):
 		return tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 	
-	def attn(self, hidden, encoder_outputs): #  (50,)  (128,13,50)
+	def attn(self, hidden, encoder_outputs): #  hidden_state(128,50),  (128,13,50)
 		# hidden: B * D          B:batch,   D:hidden_dim   S: each sequence length, 最大输入8, 最大输出9
 		# encoder_outputs: B * S * D
 		attn_weights = tf.matmul(encoder_outputs, tf.expand_dims(hidden, 2)) # (128,8,50)张量乘以(128,50,1), 得到(128,8,1), 将hidden 张量(128,50) 在axis= 2 维度增加一个维度 变成(128,50,1)
@@ -40,7 +40,7 @@ class Seq2seq(object):
 		
 			encoder_embedding = tf.Variable(tf.random_uniform([config.source_vocab_size, config.embedding_dim]), dtype=tf.float32, name='encoder_embedding') # shape=(13,100) , 要嵌入的空间
 			encoder_inputs_embedded = tf.nn.embedding_lookup(encoder_embedding, self.seq_inputs)
-			print(encoder_inputs_embedded)# 词嵌入,查表,将(128,8)形状的词嵌入(13,100)的空间, (128,13,100)
+			print(encoder_inputs_embedded)# 词嵌入,查表,将(128,8)形状的词嵌入(13,100)的空间, (128,8,100)
 			
 			((encoder_fw_outputs, encoder_bw_outputs), (encoder_fw_final_state, encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn( # 添加双向LSTM层
 				cell_fw=tf.nn.rnn_cell.GRUCell(config.hidden_dim),  #hidden_dim = 50
@@ -51,7 +51,7 @@ class Seq2seq(object):
 				time_major=False
 			)
 			encoder_state = tf.add(encoder_fw_final_state, encoder_bw_final_state) # (128,50)
-			encoder_outputs = tf.add(encoder_fw_outputs, encoder_bw_outputs) #(128,13,50)
+			encoder_outputs = tf.add(encoder_fw_outputs, encoder_bw_outputs) #(128,8,50)
 		
 		with tf.variable_scope("decoder"):
 			
@@ -103,10 +103,10 @@ class Seq2seq(object):
 						return next_input # (128,100) next_input指的是下一个batch批量的一个值
 					#
 					elements_finished = (time >= self.seq_targets_length)  #判断是否到达, 这里决定了tensorarray的序列长度为9
-					finished = tf.reduce_all(elements_finished) #Computes the "logical and"
+					finished = tf.reduce_all(elements_finished) #Computes the "logical and" "逻辑与"
 					# 获取下一个batch输入
 					input = tf.cond(finished, lambda: tokens_eos_embedded, get_next_input) #  (128,100)如果finished, input = tokens_eos_embeded, 否则调用get_next_input()函数获取下一个输入
-					if useAttention:     # (128,100)   (128,50)   attn( (50,)     (128,13,50) )
+					if useAttention:     # (128,100)         (128,50)   ,     (128,8,50)   )
 						input = tf.concat([input, self.attn(previous_state, encoder_outputs)], 1)# (128,150)
 
 

@@ -44,7 +44,7 @@ if __name__ == "__main__":
 		
 		print("samples:\n")
 		predict_batch = sess.run(model.out, feed_dict)
-		for i in range(3):
+		for i in range(10):
 			print("in:", [i2w_source[num] for num in source_batch[i] if i2w_source[num] != "_PAD"])
 			print("out:",[i2w_target[num] for num in predict_batch[i] if i2w_target[num] != "_PAD"])
 			print("tar:",[i2w_target[num] for num in target_batch[i] if i2w_target[num] != "_PAD"])

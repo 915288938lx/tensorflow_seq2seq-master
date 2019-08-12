@@ -33,11 +33,11 @@ class Seq2seq(object):
 			
 			decoder_embedding = tf.Variable(tf.random_uniform([config.target_vocab_size, config.embedding_dim]), dtype=tf.float32, name='decoder_embedding')
 			
-			tokens_go = tf.ones([config.batch_size], dtype=tf.int32, name='tokens_GO') * w2i_target["_GO"]
+			tokens_go = tf.ones([config.batch_size], dtype=tf.int32, name='tokens_GO') * w2i_target["_GO"] #(128,)
 			
-			if useTeacherForcing:
-				decoder_inputs = tf.concat([tf.reshape(tokens_go,[-1,1]), self.seq_targets[:,:-1]], 1)
-				helper = tf.contrib.seq2seq.TrainingHelper(tf.nn.embedding_lookup(decoder_embedding, decoder_inputs), self.seq_targets_length)
+			if useTeacherForcing:#	(128,9)				    (128,1)                  (128,8)
+				decoder_inputs = tf.concat([tf.reshape(tokens_go,[-1,1]), self.seq_targets[:,:-1]], 1)  # (128,9),经过封装之后, 直接输入所有time的batch以及这些输入的长度列表,再经过embedding
+				helper = tf.contrib.seq2seq.TrainingHelper(tf.nn.embedding_lookup(decoder_embedding, decoder_inputs), self.seq_targets_length) # embeding
 			else:
 				helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_embedding, tokens_go, w2i_target["_EOS"])
 				
@@ -45,7 +45,7 @@ class Seq2seq(object):
 				decoder_cell = tf.nn.rnn_cell.GRUCell(config.hidden_dim)
 				
 				if useAttention:
-					if useBeamSearch > 1:
+					if useBeamSearch > 1: #
 						tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(encoder_outputs, multiplier=useBeamSearch)
 						tiled_sequence_length = tf.contrib.seq2seq.tile_batch(self.seq_inputs_length, multiplier=useBeamSearch)
 						attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(num_units=config.hidden_dim, memory=tiled_encoder_outputs, memory_sequence_length=tiled_sequence_length)

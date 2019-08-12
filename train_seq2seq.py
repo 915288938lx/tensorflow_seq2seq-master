@@ -2,8 +2,8 @@ import tensorflow as tf
 import numpy as np
 import random
 import time
-# from model_seq2seq_contrib import Seq2seq
-from model_seq2seq import Seq2seq
+from model_seq2seq_contrib import Seq2seq
+# from model_seq2seq import Seq2seq
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 tf_config = tf.ConfigProto(allow_soft_placement=True)
@@ -84,10 +84,10 @@ def get_batch(docs_source, w2i_source, docs_target, w2i_target, batch_size):
 		target_batch.append(target_seq)
 	
 	return source_batch, source_lens, target_batch, target_lens #返回一个batch(128组)经过填充,且长度均为8的输入数组及长度列表, target输出数组长度均为9的target数组及长度列表
-	# seq_inputs = source_batch:  8个   [6, 4, 5, 0, 0, 0, 0, 0],   [12, 10, 12, 12, 5, 6, 0, 0],  [9, 9, 12, 6, 7, 12, 12, 0]
+	# seq_inputs = source_batch:    [6, 4, 5, 0, 0, 0, 0, 0],   [12, 10, 12, 12, 5, 6, 0, 0],  [9, 9, 12, 6, 7, 12, 12, 0] len=8
 	# seq_inputs_length = source_length: [3, 6, 7, 3, 2, 8, 8, 2, 5, 2, 4, 4, 4, 1, 3, 3, 3, 3, 8, 6, 5, 4, 4, 3, 2, 2, 2, 2, 4, 5, 1, 3, 7, 8, 5, 6,......] len=128
 
-	# seq_targets = target_batch:  9个  [6, 4, 5, 2, 0, 0, 0, 0, 0],  [12, 10, 12, 12, 5, 6, 2, 0, 0],  [9, 9, 12, 6, 7, 12, 12, 2, 0]
+	# seq_targets = target_batch:  9个  [6, 4, 5, 2, 0, 0, 0, 0, 0],  [12, 10, 12, 12, 5, 6, 2, 0, 0],  [9, 9, 12, 6, 7, 12, 12, 2, 0] len = 9
 	# seq_targets_length = target_length:   [4, 7, 8, 4, 3, 9, 9, 3, 6, 3, 5, 5, 5, 2, 4, 4, 4, 4, 9, 7, 6, 5, 5, 4, 3, 3, 3, 3, 5, 6, 2, 4, 8,....] len=128
 
 if __name__ == "__main__":
