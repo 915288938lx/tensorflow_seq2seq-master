@@ -1,3 +1,5 @@
 import numpy as np
-a = np.array([[2,3,4,5],[4,5,2,5]])
-print(a[:,:-1])
+a = np.ones([128])
+b = a*2
+c = b.reshape([-1,1])
+print(c)

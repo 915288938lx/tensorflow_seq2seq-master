@@ -23,7 +23,7 @@ class Seq2seq(object):
 	def build_optim(self, loss, lr):
 		return tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 	
-	def attn(self, hidden, encoder_outputs): #  hidden_state(128,50),  (128,13,50)
+	def attn(self, hidden, encoder_outputs): #  hidden指的是 decoder_hidden_state(128,50);  (128,13,50)
 		# hidden: B * D          B:batch,   D:hidden_dim   S: each sequence length, 最大输入8, 最大输出9
 		# encoder_outputs: B * S * D
 		attn_weights = tf.matmul(encoder_outputs, tf.expand_dims(hidden, 2)) # (128,8,50)张量乘以(128,50,1), 得到(128,8,1), 将hidden 张量(128,50) 在axis= 2 维度增加一个维度 变成(128,50,1)
@@ -42,7 +42,7 @@ class Seq2seq(object):
 			encoder_inputs_embedded = tf.nn.embedding_lookup(encoder_embedding, self.seq_inputs)
 			print(encoder_inputs_embedded)# 词嵌入,查表,将(128,8)形状的词嵌入(13,100)的空间, (128,8,100)
 			
-			((encoder_fw_outputs, encoder_bw_outputs), (encoder_fw_final_state, encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn( # 添加双向LSTM层
+			((encoder_fw_outputs, encoder_bw_outputs), (encoder_fw_final_state, encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn( # 添加双向动态rnn LSTM层
 				cell_fw=tf.nn.rnn_cell.GRUCell(config.hidden_dim),  #hidden_dim = 50
 				cell_bw=tf.nn.rnn_cell.GRUCell(config.hidden_dim), 
 				inputs=encoder_inputs_embedded, 
@@ -76,7 +76,7 @@ class Seq2seq(object):
 			
 			def loop_fn(time, previous_output, previous_state, previous_loop_state):
 				if previous_state is None:    # time step == 0
-					initial_elements_finished = (0 >= self.seq_targets_length)  # all False at the initial step
+					initial_elements_finished = (0 >= self.seq_targets_length)  # all False at the initial step 因为最短的序列seq_targets_length不可能为0
 					initial_state = decoder_initial_state # last time steps cell state 获取上一个时间步的cell_state,即为encoder的cell_state
 					initial_input = tokens_go_embedded # last time steps cell input 获取上一个时间步的输入, 这里为"开始符" GO
 					if useAttention:
@@ -97,7 +97,7 @@ class Seq2seq(object):
 						if useTeacherForcing:
 							prediction = self.seq_targets[:,time-1] # 这里仅仅包含batch中一个时间步的值, 如果用teacherForcing, 那就以原始输入进行训练
 						else:
-							output_logits = tf.add(tf.matmul(previous_output, W), b)
+							output_logits = tf.add(tf.matmul(previous_output, W), b) # 本处的W,b即是encoder过后的C ,encoder_state对每个输出的权重,可以说是注意力权重
 							prediction = tf.argmax(output_logits, axis=1) #(128,) 如果不用teacherForcing, 那就以预测出来的(即概率最大的那个)作为输入进行训练
 						next_input = tf.nn.embedding_lookup(decoder_embedding, prediction) #(128,100) # 下一个输入为将prediction 进行嵌入
 						return next_input # (128,100) next_input指的是下一个batch批量的一个值
