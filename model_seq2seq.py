@@ -88,14 +88,14 @@ class Seq2seq(object):
 			# 本处的 previous_output 和 previous_state 是decoder的输出和hidden_state
 			def loop_fn(time, previous_output, previous_state, previous_loop_state):
 				# 当time step为零的时候, decoder_rnn接收一个"开始"token输入和一个初始状态(这个初始状态是某个sequence输入的最终hidden_state)
-				if previous_state is None:    # time step == 0
+				if previous_state is None:    # time step == 0, 循环开始, decoder是没有state的
 					initial_elements_finished = (0 >= self.seq_targets_length)  # all False at the initial step 因为最短的序列seq_targets_length不可能为0
-					initial_state = decoder_initial_state #
+					initial_state = decoder_initial_state #将encoder的final_state传入
 					initial_input = tokens_go_embedded # last time steps cell input 获取上一个时间步的输入, 这里为"开始符" GO
 					if useAttention:
 							# (128,150) =  (128,100) concatenate(axis=1)  (128,50)
 							# 每个时间步都由和其对应的context 来辅导后续过程
-						initial_input = tf.concat([initial_input, self.attn(initial_state, encoder_outputs)], 1) #(128,150)  如果应用attention机制, 则将初始输入和attention context 进行向量axis=1的拼接, 当做初始输入
+						initial_input = tf.concat([initial_input, self.attn(initial_state, encoder_outputs)], 1) #(128,150)将encoder的所有state(即encoder_outputs)与某一个decoder的时间步计算注意力
 					initial_output = None #none
 					initial_loop_state = None  # we don't need to pass any additional information
 					return (initial_elements_finished, initial_input, initial_state, initial_output, initial_loop_state)
@@ -137,7 +137,8 @@ class Seq2seq(object):
 			decoder_outputs = tf.transpose(decoder_outputs, perm=[1,0,2]) # S*B*D -> B*S*D B:batch_size, S:max_steps, D:dim
 		    #  128            ,        9         ,    50
 			decoder_batch_size, decoder_max_steps, decoder_dim = tf.unstack(tf.shape(decoder_outputs)) # 默认对axis=0 拆散
-			#                  为了和后续W,b操作方便, 所以要reshape成2维, decoder_outputs(128,9,50), hidden_dim(50),所以decoder_outputs_flat (128*9, 50)
+			# 要开始输出了, 需要将outputs(这里是decoder_outputs(128,9,50))经过线性变换为(9,13), 加上batch_size维度即(128,9,13)
+			# decoder_outputs_flat (128*9, 50)
 			decoder_outputs_flat = tf.reshape(decoder_outputs, (-1, config.hidden_dim)) # (128*9, 50)
 			decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, W), b) #线性变换(128*9, 50) 点积 (50,13),得到(128*9,13)
 			# (128,9,13)
