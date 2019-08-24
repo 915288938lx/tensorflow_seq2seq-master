@@ -36,7 +36,7 @@ class Seq2seq(object):
 			tokens_go = tf.ones([config.batch_size], dtype=tf.int32, name='tokens_GO') * w2i_target["_GO"] #(128,)
 			
 			if useTeacherForcing:#	(128,9)				    (128,1)                  (128,8)
-				decoder_inputs = tf.concat([tf.reshape(tokens_go,[-1,1]), self.seq_targets[:,:-1]], 1)  # (128,9),经过封装之后, 直接输入所有time的batch以及这些输入的长度列表,再经过embedding
+				decoder_inputs = tf.concat([tf.reshape(tokens_go,[-1,1]), self.seq_targets[:,:-1]], 1)  # (128,9),经过封装之后, 直接输入所有time的batch以及这些输入的长度列表,再经过embedding; 为什么是[:,:-1], 是因为用y(n-1)teacher_forcing预测y(n)
 				helper = tf.contrib.seq2seq.TrainingHelper(tf.nn.embedding_lookup(decoder_embedding, decoder_inputs), self.seq_targets_length) # embeding
 			else:
 				helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_embedding, tokens_go, w2i_target["_EOS"])

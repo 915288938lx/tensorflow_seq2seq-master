@@ -23,13 +23,20 @@ class Seq2seq(object):
 	def build_optim(self, loss, lr):
 		return tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 	
-	def attn(self, hidden, encoder_outputs): #  hidden指的是 decoder_hidden_state(128,50);  (128,13,50)
-		# hidden: B * D          B:batch,   D:hidden_dim   S: each sequence length, 最大输入8, 最大输出9
+	def attn(self, hidden, encoder_outputs): #  hidden指的是 decoder_hidden_state(128,50);  (128,8,50)
+		# hidden: B * D          B:batch,   D:hidden_dim   S: each sequence length,
 		# encoder_outputs: B * S * D
-		attn_weights = tf.matmul(encoder_outputs, tf.expand_dims(hidden, 2)) # (128,8,50)张量乘以(128,50,1), 得到(128,8,1), 将hidden 张量(128,50) 在axis= 2 维度增加一个维度 变成(128,50,1)
+		# 忽略batch维度, 可以看成是一个矩阵(由所有encoder时间步的state组成,形状为(8,50)对一个向量(decoder的某一时间步的hidden_state, 形状为(50,)
+		# 做向量乘法(点积法),得到一个形状为(8,)的attention_score向量, 加上batch维度, 得到了形状为(128,8,1)
+		attn_weights = tf.matmul(encoder_outputs, tf.expand_dims(hidden, 2))
 		# attn_weights: B * S * 1
+		# 由(batch_size,sequence_length,embedding_dim) 转置为 (batch_size,embedding_dim, sequence_length)
+		# 先忽略掉batch_size维度(sequence_length,embedding_dim) 转置为 (embedding_dim, sequence_length) , 暴露出sequence_length与attention_weights左乘,
+		# 得到各个时间步encoder_state的加权
+		# (50,8) * (8,) = (50,) , 加上batch_size维度, 变成(128,50)
 		context = tf.squeeze(tf.matmul(tf.transpose(encoder_outputs, [0,2,1]), attn_weights)) # (128,50) 将所有维度维1的维都删掉
 		# context: B * D batch_size * hidden_dim
+		# 返回每一个时间步的context, 以"注意"decoder中的每一个翻译
 		return context # (128,50)
 				
 	def __init__(self, config, w2i_target, useTeacherForcing=True, useAttention=True, useBeamSearch=1):
@@ -41,7 +48,7 @@ class Seq2seq(object):
 			encoder_embedding = tf.Variable(tf.random_uniform([config.source_vocab_size, config.embedding_dim]), dtype=tf.float32, name='encoder_embedding') # shape=(13,100) , 要嵌入的空间
 			encoder_inputs_embedded = tf.nn.embedding_lookup(encoder_embedding, self.seq_inputs)
 			print(encoder_inputs_embedded)# 词嵌入,查表,将(128,8)形状的词嵌入(13,100)的空间, (128,8,100)
-			
+			# dynamic_rnn, 返回的encoder_outputs
 			((encoder_fw_outputs, encoder_bw_outputs), (encoder_fw_final_state, encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn( # 添加双向动态rnn LSTM层
 				cell_fw=tf.nn.rnn_cell.GRUCell(config.hidden_dim),  #hidden_dim = 50
 				cell_bw=tf.nn.rnn_cell.GRUCell(config.hidden_dim), 
@@ -50,16 +57,20 @@ class Seq2seq(object):
 				dtype=tf.float32, 
 				time_major=False
 			)
-			encoder_state = tf.add(encoder_fw_final_state, encoder_bw_final_state) # (128,50)
-			encoder_outputs = tf.add(encoder_fw_outputs, encoder_bw_outputs) #(128,8,50)
+
+			encoder_state = tf.add(encoder_fw_final_state, encoder_bw_final_state) # (128,50) encoder的最后一个的final_state
+			# (128,8,50),返回形状为batch_size, sequence_length, embedding_size
+			#  每一个时间步的最后一个encoder_output 输出, 就是该时间步下的state. 所以这个encoder_outputs, 里头包含了所有时间步的hidden_state
+			encoder_outputs = tf.add(encoder_fw_outputs, encoder_bw_outputs) # shape=(128,8,50)
+
 		
 		with tf.variable_scope("decoder"):
 			
 			decoder_embedding = tf.Variable(tf.random_uniform([config.target_vocab_size, config.embedding_dim]), dtype=tf.float32, name='decoder_embedding') #(13,100)
 					
 			with tf.variable_scope("gru_cell"):
-				decoder_cell = tf.nn.rnn_cell.GRUCell(config.hidden_dim)
-				decoder_initial_state = encoder_state # (128,50), 用encoder得到的state传入decoder中
+				decoder_cell = tf.nn.rnn_cell.GRUCell(config.hidden_dim)#hidden_dim = 50
+				decoder_initial_state = encoder_state # (128,50), 这儿传入的是encoder的final state
 			
 			# if useTeacherForcing and not useAttention:
 				# decoder_inputs = tf.concat([tf.reshape(tokens_go,[-1,1]), self.seq_targets[:,:-1]], 1)
@@ -81,6 +92,7 @@ class Seq2seq(object):
 					initial_input = tokens_go_embedded # last time steps cell input 获取上一个时间步的输入, 这里为"开始符" GO
 					if useAttention:
 							# (128,150) =  (128,100) concatenate(axis=1)  (128,50)
+							# 每个时间步都由和其对应的context 来辅导后续过程
 						initial_input = tf.concat([initial_input, self.attn(initial_state, encoder_outputs)], 1) #(128,150)  如果应用attention机制, 则将初始输入和attention context 进行向量axis=1的拼接, 当做初始输入
 					initial_output = None #none
 					initial_loop_state = None  # we don't need to pass any additional information
@@ -97,7 +109,7 @@ class Seq2seq(object):
 						if useTeacherForcing:
 							prediction = self.seq_targets[:,time-1] # 这里仅仅包含batch中一个时间步的值, 如果用teacherForcing, 那就以原始输入进行训练
 						else:
-							output_logits = tf.add(tf.matmul(previous_output, W), b) # 本处的W,b即是encoder过后的C ,encoder_state对每个输出的权重,可以说是注意力权重
+							output_logits = tf.add(tf.matmul(previous_output, W), b) # 本处的W,b即是encoder过后的C ,encoder_state对每个输出的权重,可以说是注意力权重, 是需要经过训练得出来的
 							prediction = tf.argmax(output_logits, axis=1) #(128,) 如果不用teacherForcing, 那就以预测出来的(即概率最大的那个)作为输入进行训练
 						next_input = tf.nn.embedding_lookup(decoder_embedding, prediction) #(128,100) # 下一个输入为将prediction 进行嵌入
 						return next_input # (128,100) next_input指的是下一个batch批量的一个值
@@ -106,15 +118,15 @@ class Seq2seq(object):
 					finished = tf.reduce_all(elements_finished) #Computes the "logical and" "逻辑与"
 					# 获取下一个batch输入
 					input = tf.cond(finished, lambda: tokens_eos_embedded, get_next_input) #  (128,100)如果finished, input = tokens_eos_embeded, 否则调用get_next_input()函数获取下一个输入
-					if useAttention:     # (128,100)         (128,50)   ,     (128,8,50)   )
-						input = tf.concat([input, self.attn(previous_state, encoder_outputs)], 1)# (128,150)
+					if useAttention:     # (128,100)    (128,50),     (128,50)   ,     (128,8,50)   )
+						input = tf.concat([input, self.attn(previous_state, encoder_outputs)], 1)# (128,150) , 每个输入batch批量(128)8个间步都会有1次的矩阵拼接, 每次的矩阵拼接代表了此次的注意力程度
 
 
 					state = previous_state #( 128,50)
 					output = previous_output #(128,50)
 					loop_state = None
 					#        boolin (128,)     , (128,150),  (128,50),  (128,50),      None), 最开始的state是encoder 传入的,然后直接将其返回给decoder_cell(state,input), 随后的state, 皆由decoder_cell自环产生
-					return (elements_finished,   input,     state,    output, 		loop_state)
+					return (elements_finished,   input,     state,    output, 		loop_state) # 其实返回的第四个量是emit_structure, 这里写成了output
 			#tensorarray对象,  (128,50)       ,_   elements_finished = (time >= self.seq_targets_length)  #判断是否到达, 这里决定了tensorarray的序列长度为9
 			decoder_outputs_ta, decoder_state, _ = tf.nn.raw_rnn(decoder_cell, loop_fn) #,先运行一次loop_fn,获取time=0的input输入,这里隐藏了一个cell自环　(output, cell_state) = cell(next_input, state)
 			# shape=(9, 128, 50)
