@@ -48,7 +48,8 @@ class Seq2seq(object):
 			encoder_embedding = tf.Variable(tf.random_uniform([config.source_vocab_size, config.embedding_dim]), dtype=tf.float32, name='encoder_embedding') # shape=(13,100) , 要嵌入的空间
 			encoder_inputs_embedded = tf.nn.embedding_lookup(encoder_embedding, self.seq_inputs)
 			print(encoder_inputs_embedded)# 词嵌入,查表,将(128,8)形状的词嵌入(13,100)的空间, (128,8,100)
-			# dynamic_rnn, 返回的encoder_outputs
+			# dynamic_rnn, 返回的outputs,last_states, 其中outputs形状是各个时间步的output(max_sequence_length, embedding_dim),
+			# last_states是最后的一个final_state, 形状是(embedding_dim,), 加上batch维度就是(batch_size, embedding_dim)
 			((encoder_fw_outputs, encoder_bw_outputs), (encoder_fw_final_state, encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn( # 添加双向动态rnn LSTM层
 				cell_fw=tf.nn.rnn_cell.GRUCell(config.hidden_dim),  #hidden_dim = 50
 				cell_bw=tf.nn.rnn_cell.GRUCell(config.hidden_dim), 
@@ -84,11 +85,12 @@ class Seq2seq(object):
 			
 			W = tf.Variable(tf.random_uniform([config.hidden_dim, config.target_vocab_size]), dtype=tf.float32, name='decoder_out_W') #(50,13)
 			b = tf.Variable(tf.zeros([config.target_vocab_size]), dtype=tf.float32, name="decoder_out_b") #(13,), 后面可以通过广播
-			
+			# 本处的 previous_output 和 previous_state 是decoder的输出和hidden_state
 			def loop_fn(time, previous_output, previous_state, previous_loop_state):
+				# 当time step为零的时候, decoder_rnn接收一个"开始"token输入和一个初始状态(这个初始状态是某个sequence输入的最终hidden_state)
 				if previous_state is None:    # time step == 0
 					initial_elements_finished = (0 >= self.seq_targets_length)  # all False at the initial step 因为最短的序列seq_targets_length不可能为0
-					initial_state = decoder_initial_state # last time steps cell state 获取上一个时间步的cell_state,即为encoder的cell_state
+					initial_state = decoder_initial_state #
 					initial_input = tokens_go_embedded # last time steps cell input 获取上一个时间步的输入, 这里为"开始符" GO
 					if useAttention:
 							# (128,150) =  (128,100) concatenate(axis=1)  (128,50)
